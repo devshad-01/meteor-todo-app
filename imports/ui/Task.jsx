@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { Meteor } from "meteor/meteor";
 import { DeleteButton } from './DeleteButton';
 
 export const Task = ({ task }) => {
@@ -6,12 +7,24 @@ export const Task = ({ task }) => {
 
   const toggleCheckbox = () => {
     setIsChecked(!isChecked);
-    // Here you would typically update the task in the database
+    // Update the task in the database using Meteor method
+    Meteor.call('tasks.setIsChecked', task._id, !isChecked, (error) => {
+      if (error) {
+        console.error('Error updating task:', error);
+        setIsChecked(isChecked); // Revert UI state if the update fails
+        alert('Could not update task: ' + error.reason);
+      }
+    });
   };
 
   const handleDelete = () => {
-    // Here you would typically delete the task from the database
-    console.log('Delete task:', task._id);
+    // Delete the task from the database using Meteor method
+    Meteor.call('tasks.remove', task._id, (error) => {
+      if (error) {
+        console.error('Error deleting task:', error);
+        alert('Could not delete task: ' + error.reason);
+      }
+    });
   };
 
   return (

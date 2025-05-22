@@ -1,14 +1,36 @@
 import React, { useState } from 'react';
+import { Meteor } from 'meteor/meteor';
 import { useTracker, useSubscribe } from 'meteor/react-meteor-data'; 
 import { TasksCollection } from '/imports/api/TasksCollection';
 import { Task } from './Task';
 
 export const App = () => {
-
-  const isLoading = useSubscribe("tasks");  
-  const tasks = useTracker(() => TasksCollection.find({}).fetch());
   const [newTask, setNewTask] = useState('');
+  const [filter, setFilter] = useState('all'); // 'all', 'pending', or 'completed'
 
+  // Subscribe to the appropriate publication based on filter
+  const isLoading = useSubscribe(filter === 'pending' ? 'pendingTasks' : 
+                               filter === 'completed' ? 'completedTasks' : 'tasks');
+
+  // Get tasks based on the active filter
+  const tasks = useTracker(() => {
+    if (!isLoading()) {
+      const query = filter === 'pending' ? { isChecked: false } :
+                  filter === 'completed' ? { isChecked: true } : {};
+      return TasksCollection.find(query, { sort: { createdAt: -1 } }).fetch();
+    }
+    return [];
+  });
+
+  // Count tasks for each category
+  const pendingTasksCount = useTracker(() => 
+    TasksCollection.find({ isChecked: false }).count()
+  );
+  const completedTasksCount = useTracker(() => 
+    TasksCollection.find({ isChecked: true }).count()
+  );
+
+  // Loading state
   if (isLoading()) {
     return (
       <div className="flex justify-center items-center min-h-screen">
@@ -20,14 +42,32 @@ export const App = () => {
     );
   }
 
+  // Handle adding a new task
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!newTask.trim()) return;
     
-    // Here you would typically add the task to the database
-    console.log('Add new task:', newTask);
+    // Call the Meteor method to add the task
+    Meteor.call('tasks.insert', newTask.trim(), (error) => {
+      if (error) {
+        console.error('Error adding task:', error);
+        alert('Could not add task: ' + error.reason);
+      }
+    });
     
     setNewTask('');
+  };
+  
+  // Handle removing all completed tasks
+  const handleRemoveCompleted = () => {
+    if (window.confirm('Are you sure you want to remove all completed tasks?')) {
+      Meteor.call('tasks.removeCompleted', (error) => {
+        if (error) {
+          console.error('Error removing completed tasks:', error);
+          alert('Could not remove completed tasks: ' + error.reason);
+        }
+      });
+    }
   };
 
   return (
@@ -52,10 +92,45 @@ export const App = () => {
         </div>
       </form>
 
-      <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-        <div className="p-4 bg-gray-50 border-b border-gray-200">
-          <h2 className="text-lg font-medium text-gray-900">Your Tasks</h2>
-          <p className="text-sm text-gray-500">You have {tasks.length} tasks</p>
+      <div className="bg-white rounded-lg shadow-lg overflow-hidden mb-4">
+        {/* Filter tabs */}
+        <div className="bg-gray-100 border-b border-gray-200">
+          <nav className="flex">
+            <button
+              onClick={() => setFilter('all')}
+              className={`px-4 py-2 text-sm font-medium ${filter === 'all' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              All ({pendingTasksCount + completedTasksCount})
+            </button>
+            <button
+              onClick={() => setFilter('pending')}
+              className={`px-4 py-2 text-sm font-medium ${filter === 'pending' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Pending ({pendingTasksCount})
+            </button>
+            <button
+              onClick={() => setFilter('completed')}
+              className={`px-4 py-2 text-sm font-medium ${filter === 'completed' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:text-gray-700'}`}
+            >
+              Completed ({completedTasksCount})
+            </button>
+          </nav>
+        </div>
+
+        <div className="p-4 bg-gray-50 border-b border-gray-200 flex justify-between items-center">
+          <div>
+            <h2 className="text-lg font-medium text-gray-900">Your Tasks</h2>
+            <p className="text-sm text-gray-500">You have {tasks.length} {filter !== 'all' ? filter : ''} tasks</p>
+          </div>
+          
+          {completedTasksCount > 0 && (
+            <button
+              onClick={handleRemoveCompleted}
+              className="px-3 py-1 text-xs text-red-600 hover:text-red-800 focus:outline-none"
+            >
+              Clear completed
+            </button>
+          )}
         </div>
         
         {tasks.length > 0 ? (
@@ -66,8 +141,8 @@ export const App = () => {
           </ul>
         ) : (
           <div className="p-8 text-center text-gray-500">
-            <p className="mb-2 text-sm">No tasks yet</p>
-            <p className="text-xs">Add a new task to get started</p>
+            <p className="mb-2 text-sm">No {filter !== 'all' ? filter : ''} tasks yet</p>
+            <p className="text-xs">{filter === 'all' || filter === 'pending' ? 'Add a new task to get started' : 'Complete some tasks to see them here'}</p>
           </div>
         )}
       </div>

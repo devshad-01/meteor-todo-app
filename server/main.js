@@ -2,6 +2,7 @@ import { Meteor } from "meteor/meteor";
 import { TasksCollection } from "/imports/api/TasksCollection";
 
 import "../imports/api/TasksPublications"; 
+import "../imports/api/TasksMethods";
 
 const insertTask = (taskText) =>
   TasksCollection.insertAsync({ text: taskText });
